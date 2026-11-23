@@ -263,6 +263,14 @@ The summary is built from a template, not by an LLM, so every number in it match
 | `GET /api/telegram` | Whether a bot token is set, the bot's username, and the result of importing `config/recipients.csv`. |
 | `GET /api/health` | Health check: `status`, `rows`, `source` (CSV the data came from), `seeded_at`, and `csv_changed_since_seed`. |
 
+### Postman
+
+Import `postman/collection.json` in Postman (**Import** > select the file). It has every endpoint above, with example bodies, descriptions and tests.
+
+- Variables live on the collection: `baseUrl` (default `http://localhost:8000`; change it if you set `APP_PORT`), `region`, `chatId` (a placeholder), and `recipientIds` for sending.
+- The whole collection can run in the Collection Runner. The Recipients folder adds two test recipients and deletes them again at the end. Its one send goes to the placeholder chat ID, so nothing reaches anyone; without a bot token it returns 503.
+- The **Send to Telegram** folder sends real messages to the ids in `recipientIds`. Run it by hand.
+
 ## Run without Docker
 
 Requires Python 3.10+ and Node.js 18+.
@@ -301,6 +309,7 @@ The analysis tests use a six-outlet fixture (`tests/conftest.py`) small enough t
 
 ```
 setup.sh                    one-command setup
+postman/collection.json     Postman collection for the API (import-ready, v2.1)
 docker-compose.yml          app + bot services
 .env.example                every setting, with comments
 config/recipients.example.csv  sales managers and heads, with empty chat IDs to fill in

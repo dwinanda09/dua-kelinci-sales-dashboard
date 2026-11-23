@@ -1,0 +1,1007 @@
+{
+  "info": {
+    "_postman_id": "dbabda38-be94-5c7b-874c-64bbb1bb758f",
+    "name": "Dua Kelinci Sales Dashboard",
+    "description": "API of the Dua Kelinci sales dashboard (FastAPI).\n\nStart the app with `./setup.sh` (or `docker compose up -d`). It listens on http://localhost:8000 unless `APP_PORT` is changed in `.env`; change the `baseUrl` collection variable to match.\n\nNo authentication. Running the whole collection in the Collection Runner is safe: the Recipients folder adds two test recipients and deletes them again, and the only Telegram call goes to the placeholder `chatId`. The **Send to Telegram** folder sends real messages; run it by hand.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Status",
+      "description": "Health of the app and the Telegram bot setup.",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "App status and which sales data is loaded.\n\nResponse: `status`, `rows` (cleaned rows in SQLite), `source` (CSV the data was seeded from), `seeded_at` (UTC, set on first setup or the last `./setup.sh reseed`), and `csv_changed_since_seed` (true when `data/sales.csv` was edited after seeding; run `./setup.sh reseed` to load it)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"status is ok\", () => pm.expect(pm.response.json().status).to.eql(\"ok\"));"
+                ]
+              }
+            }
+          ],
+          "id": "a8b33a01-f6c8-5298-93f8-4442df79cbb8"
+        },
+        {
+          "name": "Telegram status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/telegram",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "telegram"
+              ]
+            },
+            "description": "Whether `TELEGRAM_BOT_TOKEN` is set, the bot's username (null without a token), and the result of importing `config/recipients.csv` (`added`, `updated`, `skipped`)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "id": "663464bd-3c71-5680-8473-7cefaff885e6"
+        }
+      ],
+      "id": "c8052788-3428-5ca6-b3fd-817a85b11572"
+    },
+    {
+      "name": "Dashboard",
+      "description": "Data behind the dashboard page.",
+      "item": [
+        {
+          "name": "Dashboard (all regions)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard"
+              ]
+            },
+            "description": "Everything the dashboard shows: KPIs, sales by region and brand, region x brand matrix, the 5 weakest outlets with reasons, new outlets, the outlet scorecard, the summary paragraph, the data-quality report and the returns.\n\nAmounts are integers in rupiah."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test(\"5 weakest outlets\", () => pm.expect(d.weakest).to.have.lengthOf(5));",
+                  "pm.test(\"has summary\", () => pm.expect(d.summary).to.be.a(\"string\").and.not.empty);"
+                ]
+              }
+            }
+          ],
+          "id": "9ab54e9e-0f61-56b5-927f-81888b6771ea"
+        },
+        {
+          "name": "Dashboard (one region)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard?region={{region}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard"
+              ],
+              "query": [
+                {
+                  "key": "region",
+                  "value": "{{region}}"
+                }
+              ]
+            },
+            "description": "Same response, with KPIs and breakdowns limited to one region. The weakest-outlet ranking and the summary always use all regions.\n\nRegion names: Jabodetabek, Jawa Barat, Jawa Tengah, Jawa Timur, Kalimantan, Sumatera."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"regions in breakdown match filter\", () => {",
+                  "  const names = pm.response.json().by_region.map(r => r.region);",
+                  "  pm.expect(names).to.eql([pm.collectionVariables.get(\"region\")]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "id": "1c8d84e7-d9d4-5f55-b0a3-c952b4da50be"
+        },
+        {
+          "name": "Dashboard (several regions)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard?region=Jawa Barat&region=Jawa Timur",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard"
+              ],
+              "query": [
+                {
+                  "key": "region",
+                  "value": "Jawa Barat"
+                },
+                {
+                  "key": "region",
+                  "value": "Jawa Timur"
+                }
+              ]
+            },
+            "description": "Repeat `region` to combine regions."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"two regions\", () => pm.expect(pm.response.json().by_region).to.have.lengthOf(2));"
+                ]
+              }
+            }
+          ],
+          "id": "4451eeb3-6a63-55e0-9205-d87304c573d2"
+        },
+        {
+          "name": "Dashboard (unknown region, 404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard?region=Papua",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard"
+              ],
+              "query": [
+                {
+                  "key": "region",
+                  "value": "Papua"
+                }
+              ]
+            },
+            "description": "A region with no data returns 404 `Tidak ada data untuk region yang dipilih.`"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "id": "cf399560-932e-53c7-a036-cb9a3c39bdea"
+        }
+      ],
+      "id": "dcfd0ff4-11d8-5429-b875-9a7e15719bc4"
+    },
+    {
+      "name": "Bot messages",
+      "description": "Plain-text messages the Telegram bot relays. Same text as the dashboard.",
+      "item": [
+        {
+          "name": "List messages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "messages"
+              ]
+            },
+            "description": "Names and descriptions of the available messages."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "id": "717afedd-02c1-5594-bae5-d267e40be944"
+        },
+        {
+          "name": "Message",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/messages/:name",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "messages",
+                ":name"
+              ],
+              "variable": [
+                {
+                  "key": "name",
+                  "value": "ringkasan",
+                  "description": "ringkasan | region | brand | terlemah"
+                }
+              ]
+            },
+            "description": "Ready-to-send text. `name` is one of `ringkasan`, `region`, `brand`, `terlemah`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"text under Telegram limit\", () => pm.expect(pm.response.json().text.length).to.be.below(4097));"
+                ]
+              }
+            }
+          ],
+          "id": "10c1802f-850d-5a4f-8f45-eb32546a137f"
+        },
+        {
+          "name": "Message (unknown, 404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/messages/:name",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "messages",
+                ":name"
+              ],
+              "variable": [
+                {
+                  "key": "name",
+                  "value": "tidak-ada"
+                }
+              ]
+            },
+            "description": "Unknown names return 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "id": "0d849470-8683-57e4-b8f2-4f830937a73b"
+        }
+      ],
+      "id": "fcee74d1-ff31-5a56-8a3a-bf0614cb55fd"
+    },
+    {
+      "name": "Recipients",
+      "description": "Sales managers (one region each) and heads (overall report). Stored in SQLite.\n\nRun this folder top to bottom: **Add recipient** saves the new id and invite code into the collection variables `newRecipientId` and `inviteCode`, **Add recipient (head)** saves `headRecipientId`, and the two delete requests remove both again at the end.",
+      "item": [
+        {
+          "name": "List recipients",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recipients"
+              ]
+            },
+            "description": "All recipients with role, region, chat ID, `connected` (true when a chat ID is set), invite link (null without a bot token) and last send."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"is a list\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ],
+          "id": "5a8abc58-12a3-5911-8c08-b4ef114a6841"
+        },
+        {
+          "name": "Add recipient (manager)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recipients"
+              ]
+            },
+            "description": "Add a sales manager. `role` is `manager` (needs `region`) or `head` (no region). `chat_id` is optional: without it the recipient cannot be sent to until it is filled in or the invite link is opened.\n\nSaves `newRecipientId` and `inviteCode` for the next requests.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Test Manager\",\n  \"role\": \"manager\",\n  \"region\": \"Jawa Barat\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set(\"newRecipientId\", r.id);",
+                  "pm.collectionVariables.set(\"inviteCode\", r.invite_code);",
+                  "pm.test(\"not connected yet\", () => pm.expect(r.connected).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "id": "e5f21e80-14ea-5b62-aee6-ca89088a3a16"
+        },
+        {
+          "name": "Add recipient (head)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recipients"
+              ]
+            },
+            "description": "Add a head who gets the overall report (no region). Saves `headRecipientId`; **Delete recipient (head)** removes it again.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Test Head\",\n  \"role\": \"head\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"headRecipientId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "id": "2ac47c3e-5ea3-501c-93db-31150a51dce7"
+        },
+        {
+          "name": "Add recipient (invalid, 422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recipients"
+              ]
+            },
+            "description": "A manager without a region (or with a region not in the data) returns 422.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tanpa Region\",\n  \"role\": \"manager\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 422\", () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "id": "540cefc2-770c-5200-9fef-526eb6fb139d"
+        },
+        {
+          "name": "Preview report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipients/:id/preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recipients",
+                ":id",
+                "preview"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{newRecipientId}}"
+                }
+              ]
+            },
+            "description": "The report text this recipient would get: the region report for a manager, the overall report for a head."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"mentions region\", () => pm.expect(pm.response.json().text).to.include(\"Jawa Barat\"));"
+                ]
+              }
+            }
+          ],
+          "id": "0336ec41-e49c-5fe7-9f49-6f1433094aa5"
+        },
+        {
+          "name": "Set chat ID",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipients/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recipients",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{newRecipientId}}"
+                }
+              ]
+            },
+            "description": "Change `name`, `region` or `chat_id`. Only the fields sent are changed. Send `\"chat_id\": null` to clear the chat ID.\n\nGet a chat ID by sending `/chatid` to the bot. Groups have negative IDs.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chat_id\": {{chatId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"connected\", () => pm.expect(pm.response.json().connected).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "id": "10a27a74-664e-5fdf-9764-f9a2b4c5deee"
+        },
+        {
+          "name": "Clear chat ID",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipients/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recipients",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{newRecipientId}}"
+                }
+              ]
+            },
+            "description": "Clear the chat ID; the recipient can no longer be sent to.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chat_id\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"not connected\", () => pm.expect(pm.response.json().connected).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "id": "9ee9e297-afa7-5c4b-adc8-e767267ccf67"
+        },
+        {
+          "name": "Register via invite code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipients/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recipients",
+                "register"
+              ]
+            },
+            "description": "What the bot calls when someone opens `t.me/<bot>?start=<invite_code>`: links the chat to the recipient.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invite_code\": \"{{inviteCode}}\",\n  \"chat_id\": {{chatId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"connected\", () => pm.expect(pm.response.json().connected).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "id": "c98fa624-15fe-5f0d-9f6b-ed7dbc86652f"
+        },
+        {
+          "name": "Register (unknown code, 404)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipients/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recipients",
+                "register"
+              ]
+            },
+            "description": "An unknown invite code returns 404.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invite_code\": \"tidak-ada\",\n  \"chat_id\": 123\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "id": "fd68e142-44dd-5ccc-b7cd-b5d5c6be1b49"
+        },
+        {
+          "name": "Send report to test recipient",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/send",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "send"
+              ]
+            },
+            "description": "Sends the test recipient its report.\n\n- Without `TELEGRAM_BOT_TOKEN`: 503.\n- With a token: 200. With the placeholder `chatId` Telegram rejects the chat, so the result has `ok: false` and the error; nothing reaches anyone.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient_ids\": [{{newRecipientId}}]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200 or 503\", () => pm.expect(pm.response.code).to.be.oneOf([200, 503]));"
+                ]
+              }
+            }
+          ],
+          "id": "dfaeaef5-4dd2-5b47-89f4-5e86c539cc0e"
+        },
+        {
+          "name": "Delete recipient",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipients/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recipients",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{newRecipientId}}"
+                }
+              ]
+            },
+            "description": "Delete a recipient (and its send log). Returns 204."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "id": "8cc9d29d-fe85-5e7d-9c8a-a9a9dcb98cdb"
+        },
+        {
+          "name": "Delete recipient (head)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipients/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recipients",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{headRecipientId}}"
+                }
+              ]
+            },
+            "description": "Removes the head added by **Add recipient (head)**."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "id": "cd7ee998-dbc9-5098-847b-54835086f687"
+        },
+        {
+          "name": "Delete recipient (unknown, 404)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipients/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recipients",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "999999"
+                }
+              ]
+            },
+            "description": "Deleting an id that does not exist returns 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "id": "ed5699af-57f0-5c3a-a709-db1f55a348be"
+        }
+      ],
+      "id": "4ee4c6fd-443b-574e-b4e9-746b3de7f36d"
+    },
+    {
+      "name": "Send to Telegram",
+      "description": "Sends real Telegram messages when `TELEGRAM_BOT_TOKEN` is set. Not part of an automated run: set `recipientIds` first, then send manually.",
+      "item": [
+        {
+          "name": "Send reports",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/send",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "send"
+              ]
+            },
+            "description": "Send each listed recipient the report for its role and region. Repeated ids are sent once.\n\nSet the collection variable `recipientIds` to a comma-separated list of ids from **List recipients**, for example `1,2,7`.\n\nResponse: `sent`, `failed`, and `results[]` with `recipient_id`, `name`, `ok`, `error`. A recipient without a chat ID fails with `Data belum lengkap: chat ID Telegram kosong...` and nothing is sent to it. Returns 503 when no bot token is set.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient_ids\": [{{recipientIds}}]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200 or 503\", () => pm.expect(pm.response.code).to.be.oneOf([200, 503]));"
+                ]
+              }
+            }
+          ],
+          "id": "0306b4a3-7fa7-5141-b6d3-541a75e3e265"
+        }
+      ],
+      "id": "e0c741a6-0bca-54f0-a68e-4a66d532bb6a"
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string",
+      "description": "App URL. Port comes from APP_PORT in .env (default 8000)."
+    },
+    {
+      "key": "region",
+      "value": "Jawa Barat",
+      "type": "string",
+      "description": "Region for the filtered dashboard."
+    },
+    {
+      "key": "chatId",
+      "value": "123456789",
+      "type": "string",
+      "description": "Placeholder Telegram chat ID. Replace with a real one (send /chatid to the bot) to test real sending."
+    },
+    {
+      "key": "newRecipientId",
+      "value": "",
+      "type": "string",
+      "description": "Set by 'Add recipient (manager)'."
+    },
+    {
+      "key": "inviteCode",
+      "value": "",
+      "type": "string",
+      "description": "Set by 'Add recipient (manager)'."
+    },
+    {
+      "key": "headRecipientId",
+      "value": "",
+      "type": "string",
+      "description": "Set by 'Add recipient (head)'."
+    },
+    {
+      "key": "recipientIds",
+      "value": "1",
+      "type": "string",
+      "description": "Comma-separated recipient ids for 'Send reports', e.g. 1,2,7."
+    }
+  ]
+}
