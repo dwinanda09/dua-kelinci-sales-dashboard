@@ -301,7 +301,11 @@ Checked by hand with Docker (not part of `pytest`):
 - `reseed` with a path outside `data/` is refused.
 - `clean-data` without a terminal and without `--yes` deletes nothing.
 
-Not tested yet: the bot against a real Telegram bot token. Sending is covered by unit tests with a mocked Telegram API only.
+Checked with a real Telegram bot token:
+
+- `POST /api/send` delivered the overall report (head) and the Jawa Barat region report (manager) to a real chat.
+
+Not tested yet with a real token: the bot commands (`/ringkasan`, `/kirim`, invite links and so on). They are covered by the API tests only. Only one program can poll a bot token at a time: if the same token runs elsewhere, the bot logs `Conflict: terminated by other getUpdates request`. Stop the other program or use a separate bot.
 
 The analysis tests use a six-outlet fixture (`tests/conftest.py`) small enough to check every weakness score by hand; the expected values are written out in the test.
 
