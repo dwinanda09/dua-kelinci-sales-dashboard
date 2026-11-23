@@ -1,0 +1,41 @@
+# Dashboard: docker compose up -d --build
+# Dashboard + Telegram bot: docker compose --profile bot up -d --build
+# Or just run ./setup.sh, which fills .env and picks the right command.
+
+services:
+  app:
+    build: .
+    env_file:  # the app sends reports with TELEGRAM_BOT_TOKEN
+      - path: .env
+        required: false
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - sales-db:/app/var  # SQLite: survives restarts and `down`; removed only by `down -v` (./setup.sh reset)
+      - ./config:/app/config:ro  # recipients.csv is read at startup
+      - ./data:/app/data:ro  # seed source; read on first setup and by ./setup.sh reseed
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  bot:
+    build: ./bot
+    profiles: ["bot"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      API_URL: http://app:8000
+      TZ: ${TZ:-Asia/Jakarta}
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  sales-db:

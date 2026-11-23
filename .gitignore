@@ -1,3 +1,16 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.DS_Store
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+var/
+.env
+config/recipients.csv
+
+# --- GitHub Python template (from the initial commit) ---
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
