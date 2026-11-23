@@ -1,25 +1,27 @@
-# App image: builds the React frontend, then serves it and the API with FastAPI.
+# Backend image (FastAPI). The frontend has its own image: frontend/Dockerfile.
+#   runtime (default): the API, run by the `app` service
+#   test:              the backend unit tests, run by `make test`
 
-FROM node:22-alpine AS web
-WORKDIR /web
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --no-audit --no-fund
-COPY frontend/ ./
-RUN npm run build
-
-FROM python:3.12-slim
+FROM python:3.12-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     SALES_CSV=/app/data/sales.csv \
     DB_PATH=/app/var/sales.db \
-    FRONTEND_DIST=/app/frontend/dist \
     RECIPIENTS_CSV=/app/config/recipients.csv
 WORKDIR /app/backend
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+FROM base AS test
+COPY backend/requirements-dev.txt .
+RUN pip install --no-cache-dir -r requirements-dev.txt
 COPY backend/ .
 COPY data/ /app/data/
-COPY --from=web /web/dist /app/frontend/dist
+CMD ["pytest"]
+
+FROM base AS runtime
+COPY backend/ .
+COPY data/ /app/data/
 RUN useradd --create-home app && mkdir -p /app/var && chown app /app/var
 USER app
 EXPOSE 8000

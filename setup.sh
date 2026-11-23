@@ -50,10 +50,6 @@ set_env() {  # set_env KEY VALUE -> replace or append KEY in .env
   mv "$tmp" "$ENV_FILE"
 }
 
-profiles() {  # start the bot only when a token is set
-  if [ -n "$(get_env TELEGRAM_BOT_TOKEN)" ]; then echo "--profile bot"; fi
-}
-
 # --- Subcommands -----------------------------------------------------------
 seeder() {  # run the seeder in a one-off app container on the same volume
   $COMPOSE run --rm --no-deps app python -m sales.seed "$@"
@@ -153,8 +149,8 @@ APP_PORT="${APP_PORT:-8000}"
 # --- Start -----------------------------------------------------------------
 echo
 say "Membangun dan menjalankan container (pertama kali bisa 2-3 menit)..."
-# shellcheck disable=SC2046
-$COMPOSE $(profiles) up -d --build
+# Backend first, frontend once the backend is healthy, then the bot if a token is set.
+COMPOSE="$COMPOSE" ./scripts/start.sh
 
 printf 'Menunggu dashboard siap'
 for _ in $(seq 1 60); do

@@ -33,6 +33,39 @@ Other commands:
 TELEGRAM_BOT_TOKEN=123456:ABC... ./setup.sh   # no prompt
 ```
 
+### Make
+
+After the first `./setup.sh` (or with your own `.env`), the day-to-day commands are in the `Makefile`. Run `make` to list them.
+
+| Command | What it does |
+| --- | --- |
+| `make run` | Builds and starts the backend, waits until its healthcheck passes, then builds and starts the frontend. Also starts the bot when `TELEGRAM_BOT_TOKEN` is set in `.env`. Prints the dashboard link when ready. |
+| `make down` | Stops and removes the containers and the network (`docker compose down`). The data in the `sales-db` volume is kept. |
+| `make stop` | Stops every process of this project without removing anything: all its containers, plus any backend, frontend or bot started by hand from this folder (`uvicorn`, `npm run dev`, `bot.py`). `make run` starts the containers again. |
+| `make test` | Runs the backend unit tests in Docker (Python 3.12, no local setup needed). Fails below 98% coverage. |
+
+How `make run` orders the start (`scripts/start.sh`, also used by `./setup.sh`):
+
+```mermaid
+flowchart LR
+    A["Build and start app"] --> B{"app healthy?<br/>poll every 1 s, up to 120 s"}
+    B -->|"yes"| C["Build and start web"]
+    B -->|"unhealthy or timeout"| X["Print last 30 log lines<br/>stop with error"]
+    C --> D{"TELEGRAM_BOT_TOKEN<br/>in .env?"}
+    D -->|"yes"| E["Start bot"]
+    D -->|"no"| F["Ready on :8000"]
+    E --> F
+```
+
+1. `docker compose up -d --build app`: build and start the backend.
+2. Poll the backend container's healthcheck (`GET /api/health`) every second, for up to 120 seconds (`WAIT_SECONDS`). If it turns unhealthy or times out, print the last 30 log lines and stop with an error; the frontend is not started.
+3. `docker compose up -d --build --no-deps web`: build the frontend image and start it, then wait for its healthcheck.
+4. Start the bot if a token is set.
+
+`docker compose up -d --build` keeps the same order through `depends_on: condition: service_healthy`, but it builds every image before starting anything.
+
+None of these commands delete data. To delete data, use `./setup.sh clean-data` or `./setup.sh reset` (see "Sales data").
+
 ## Configuration
 
 All settings live in `.env`. `./setup.sh` copies it from `.env.example`. Only the bot token is needed for the bot; everything else has a default.
@@ -202,19 +235,34 @@ Deliberately left out: gradients, glass effects, drop shadows, icon-per-card KPI
 | Part | Tool | Why |
 | --- | --- | --- |
 | Data processing | Python, pandas | Cleaning and aggregating a few thousand rows; the logic is easy to read and test. |
-| API | FastAPI | Small, typed, and serves the built frontend too, so there is one URL. |
+| API | FastAPI | Small and typed. Outside Docker it also serves the built frontend, so there is one URL. |
 | Storage | SQLite, in a Docker volume | Holds the sales data, the Telegram recipients and a send log. One file, no database server to set up. |
-| Frontend | React, Vite, TypeScript | A single page; Vite builds it to static files. |
+| Frontend | React, Vite, TypeScript, nginx | A single page; Vite builds it to static files and nginx serves them, forwarding `/api` to the backend. |
 | Charts | Recharts | Bar charts for region and brand by month. |
 | Bot | python-telegram-bot | Long polling, so no public URL or webhook is needed; built-in daily job for the digest. |
-| Packaging | Docker Compose | `app` (API + frontend) and `bot` (starts only when a token is set). |
+| Packaging | Docker Compose, Make | `app` (backend API), `web` (frontend on nginx, starts after `app` is healthy), `bot` (starts only when a token is set), `test` (unit tests, run by `make test`). |
 
-```
-Browser ──► app (FastAPI) ──► SQLite (volume): sales, recipients, send_log
-               │  ▲
-   sendMessage │  │ /api/messages, /api/recipients, /api/send
-               ▼  │
-Telegram ◄─────► bot (commands, invite links, /kirim)
+```mermaid
+flowchart TB
+    user["Browser"]
+    csv[/"data/sales.csv<br/>seed source, first setup only"/]
+    tg["Telegram"]
+
+    subgraph compose["Docker Compose"]
+        direction TB
+        web["web<br/>nginx on :8000<br/>built React app"]
+        app["app<br/>FastAPI + pandas"]
+        db[("SQLite in volume sales-db<br/>sales, meta, recipients, send_log")]
+        bot["bot<br/>python-telegram-bot"]
+    end
+
+    user -->|"pages"| web
+    web -->|"/api/*"| app
+    csv -.->|"seed"| app
+    app <--> db
+    bot -->|"/api/messages<br/>/api/recipients<br/>/api/send"| app
+    app -->|"sendMessage: reports"| tg
+    tg <-->|"commands, invite links, /kirim"| bot
 ```
 
 Reports are always sent by the backend, whether the request comes from the dashboard or from `/kirim`, so both paths produce the same text and the same send log.
@@ -285,7 +333,7 @@ cd ../bot && pip install -r requirements.txt && \
 
 For frontend development with hot reload, run `npm run dev` in `frontend/` and open http://localhost:5173 (Vite forwards `/api` to port 8000).
 
-Tests:
+Tests (or `make test`, which needs only Docker):
 
 ```bash
 cd backend && pip install -r requirements-dev.txt
@@ -313,8 +361,14 @@ The analysis tests use a six-outlet fixture (`tests/conftest.py`) small enough t
 
 ```
 setup.sh                    one-command setup
+Makefile                    make run / down / stop / test
+scripts/start.sh            ordered start: backend, wait for health, then frontend and bot
+scripts/stop.sh             stop the containers and local dev servers of this folder
+Dockerfile                  backend image (runtime) and test image (target: test)
+frontend/Dockerfile         frontend image: Vite build, served by nginx
+frontend/nginx.conf         static files, SPA fallback, /api forwarded to the backend
 postman/collection.json     Postman collection for the API (import-ready, v2.1)
-docker-compose.yml          app + bot services
+docker-compose.yml          app, web, bot and test services
 .env.example                every setting, with comments
 config/recipients.example.csv  sales managers and heads, with empty chat IDs to fill in
 data/sales.csv              sample data from the brief

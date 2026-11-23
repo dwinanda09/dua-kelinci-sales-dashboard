@@ -1,15 +1,16 @@
-# Dashboard: docker compose up -d --build
-# Dashboard + Telegram bot: docker compose --profile bot up -d --build
-# Or just run ./setup.sh, which fills .env and picks the right command.
+# Start order: backend (app) first, frontend (web) once the backend is healthy.
+#   make run                          backend, wait for health, then build and start the frontend (and the bot if a token is set)
+#   docker compose up -d --build      same order, enforced by depends_on (both images are built first)
+#   ./setup.sh                        fills .env, then does what `make run` does
 
 services:
-  app:
-    build: .
+  app:  # backend: FastAPI + SQLite
+    build:
+      context: .
+      target: runtime
     env_file:  # the app sends reports with TELEGRAM_BOT_TOKEN
       - path: .env
         required: false
-    ports:
-      - "${APP_PORT:-8000}:8000"
     environment:
       TZ: ${TZ:-Asia/Jakarta}
     volumes:
@@ -18,6 +19,20 @@ services:
       - ./data:/app/data:ro  # seed source; read on first setup and by ./setup.sh reseed
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  web:  # frontend: built React app on nginx; forwards /api to app
+    build: ./frontend
+    ports:
+      - "${APP_PORT:-8000}:80"
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/api/health"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -36,6 +51,12 @@ services:
       app:
         condition: service_healthy
     restart: unless-stopped
+
+  test:  # backend unit tests: make test
+    build:
+      context: .
+      target: test
+    profiles: ["test"]
 
 volumes:
   sales-db:
